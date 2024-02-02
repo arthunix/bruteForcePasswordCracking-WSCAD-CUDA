@@ -3,6 +3,7 @@
 #include <string.h>
 #include <math.h>
 #include "md5.cuh"
+#include "device_launch_parameters.h"
 
 #define MAX 3
 #define LETTERS_LEN 36
@@ -11,11 +12,11 @@ typedef unsigned char byte;
 
 char letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
 __device__ __constant__ char dLetters[LETTERS_LEN];
+__device__ __constant__ byte dHash1[MD5_DIGEST_LENGTH];
 
 void strHex_to_byte(char*, byte*);
-void digest(byte* hash);
-__device__ int ustrncmp(const char*, const char*, size_t);
-__device__ size_t ustrlen(const char*);
+__device__ int dstrncmp(const char*, const char*, size_t);
+__device__ size_t dstrlen(const char*);
 __device__ __host__ void print_digest(byte*);
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
@@ -28,34 +29,29 @@ inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort =
 	}
 }
 
-__global__ void iterate(byte* hash, int len, int* ok) {
+__global__ void iterate(int len) {
 	char* str = new char[len];
 
 	if (len == 1) {
-		str[0] = dLetters[blockIdx.x];
+		str[0] = dLetters[threadIdx.x];
+		printf("%s\n", str);
 	}
 	else if (len == 2) {
 		str[0] = dLetters[blockIdx.x];
-		str[1] = dLetters[blockIdx.x];
-	}
-	else if (len == 3) {
-		str[0] = dLetters[blockIdx.x];
-		str[1] = dLetters[blockIdx.x];
-		str[2] = dLetters[blockIdx.x];
+		str[1] = dLetters[threadIdx.x];
+		printf("%s\n", str);
 	}
 
-	printf("%s\n", str);
 	delete[] str;
 }
 
 int main(int argc, char** argv) {
 	int lenMax = MAX;
 	int len;
-	int ok = 0, r;
+	//int ok = 0;
+	int r;
 	char hash1_str[2 * MD5_DIGEST_LENGTH + 1];
 	byte hash1[MD5_DIGEST_LENGTH]; // password hash
-
-	cudaMemcpyToSymbol(dLetters, &letters, LETTERS_LEN, 0, cudaMemcpyHostToDevice);
 
 	// Input:
 	r = scanf("%s", hash1_str);
@@ -70,9 +66,12 @@ int main(int argc, char** argv) {
 	strHex_to_byte(hash1_str, hash1);
 	print_digest(hash1);
 
+	gpuErrchk( cudaMemcpyToSymbol(dLetters, &letters, LETTERS_LEN, 0, cudaMemcpyHostToDevice) );
+	gpuErrchk( cudaMemcpyToSymbol(dHash1, &hash1, MD5_DIGEST_LENGTH, 0, cudaMemcpyHostToDevice) );
+
 	// Generate all possible passwords of different sizes.
 	for (len = 1; len <= lenMax; len++) {
-		iterate <<< pow(36, len), 36 >>> (hash1, len, &ok);
+		iterate <<<(unsigned int)pow(36, len-1),36>>>(len);
 		gpuErrchk(cudaPeekAtLastError());
 	}
 }
@@ -86,24 +85,24 @@ void strHex_to_byte(char* str, byte* hash) {
 	}
 }
 
-__device__ int ustrncmp(const char* s1, const char* s2, size_t n) {
-	unsigned char uc1, uc2;
+__device__ int dstrncmp(const char* _l, const char* _r, size_t n) {
+	unsigned char ll, lr;
 	if (n == 0) {
 		return 0;
 	}
-	while (n-- > 0 && *s1 == *s2) {
-		if (n == 0 || *s1 == '\0') {
+	while (n-- > 0 && *_l == *_r) {
+		if (n == 0 || *_l == '\0') {
 			return 0;
 		}
-		s1++;
-		s2++;
+		_l++;
+		_r++;
 	}
-	uc1 = (*(unsigned char*)s1);
-	uc2 = (*(unsigned char*)s2);
-	return ((uc1 < uc2) ? -1 : (uc1 > uc2));
+	ll = (*(unsigned char*)_l);
+	lr = (*(unsigned char*)_r);
+	return ((ll < lr) ? -1 : (ll > lr));
 }
 
-__device__ size_t ustrlen(const char* str) {
+__device__ size_t dstrlen(const char* str) {
 	const char* s;
 	for (s = str; *s; ++s);
 	return(s - str);
