@@ -31,6 +31,7 @@ inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort =
 
 __global__ void iterate(int len) {
 	char* str = new char[len];
+	byte hash2[MD5_DIGEST_LENGTH];
 
 	if (len == 1) {
 		str[0] = dLetters[threadIdx.x];
@@ -40,6 +41,13 @@ __global__ void iterate(int len) {
 		str[0] = dLetters[blockIdx.x];
 		str[1] = dLetters[threadIdx.x];
 		printf("%s\n", str);
+	}
+
+	if( dstrlen(str) ) {
+		MD5((byte*)str, dstrlen(str), (unsigned int*)hash2); (byte*)hash2;
+		if ( dstrncmp((char*)dHash1, (char*)hash2, MD5_DIGEST_LENGTH) == 0 ) {
+			printf("found: %s\n", str);
+		}
 	}
 
 	delete[] str;

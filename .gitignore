@@ -6,3 +6,4 @@
 *.fatbin
 /.vs/bfpc
 /build
+/vc140.pdb
