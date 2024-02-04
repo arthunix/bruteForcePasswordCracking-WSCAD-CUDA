@@ -5,7 +5,7 @@
 #include "md5.cuh"
 #include "device_launch_parameters.h"
 
-#define MAX 3
+#define MAX 6
 #define LETTERS_LEN 36
 
 typedef unsigned char byte;
@@ -13,6 +13,7 @@ typedef unsigned char byte;
 char letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
 __device__ __constant__ char dLetters[LETTERS_LEN];
 __device__ __constant__ byte dHash1[MD5_DIGEST_LENGTH];
+__device__ __shared__ int *dOk;
 
 void strHex_to_byte(char*, byte*);
 __device__ int dstrncmp(const char*, const char*, size_t);
@@ -32,21 +33,22 @@ inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort =
 __global__ void iterate(int len) {
 	char* str = new char[len];
 	byte hash2[MD5_DIGEST_LENGTH];
+	long long index, divisor;
 
-	if (len == 1) {
-		str[0] = dLetters[threadIdx.x];
-		printf("%s\n", str);
+	index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	for (int i = 0; i < len; i++) {
+		divisor = (int)pow((double)LETTERS_LEN, (double)(len - i - 1));
+		str[i] = dLetters[ ( index / divisor ) % LETTERS_LEN ];
 	}
-	else if (len == 2) {
-		str[0] = dLetters[blockIdx.x];
-		str[1] = dLetters[threadIdx.x];
-		printf("%s\n", str);
-	}
+
+	//printf("idx: %lld.str: %s\n", idx, str);
 
 	if( dstrlen(str) ) {
-		MD5((byte*)str, dstrlen(str), (unsigned int*)hash2); (byte*)hash2;
+		MD5((byte*)str, dstrlen(str), (unsigned int*)hash2);
 		if ( dstrncmp((char*)dHash1, (char*)hash2, MD5_DIGEST_LENGTH) == 0 ) {
 			printf("found: %s\n", str);
+			//atomicAdd(&dOk, 1);
 		}
 	}
 
@@ -55,9 +57,7 @@ __global__ void iterate(int len) {
 
 int main(int argc, char** argv) {
 	int lenMax = MAX;
-	int len;
-	//int ok = 0;
-	int r;
+	int len, r;
 	char hash1_str[2 * MD5_DIGEST_LENGTH + 1];
 	byte hash1[MD5_DIGEST_LENGTH]; // password hash
 
@@ -74,13 +74,19 @@ int main(int argc, char** argv) {
 	strHex_to_byte(hash1_str, hash1);
 	print_digest(hash1);
 
+	int ok = 0;
+
 	gpuErrchk( cudaMemcpyToSymbol(dLetters, &letters, LETTERS_LEN, 0, cudaMemcpyHostToDevice) );
 	gpuErrchk( cudaMemcpyToSymbol(dHash1, &hash1, MD5_DIGEST_LENGTH, 0, cudaMemcpyHostToDevice) );
 
+	gpuErrchk( cudaMalloc(&dOk, sizeof(int)) );
+	//gpuErrchk( cudaMemcpy(&dOk, &ok, sizeof(int), cudaMemcpyHostToDevice) );
+
 	// Generate all possible passwords of different sizes.
-	for (len = 1; len <= lenMax; len++) {
-		iterate <<<(unsigned int)pow(36, len-1),36>>>(len);
-		gpuErrchk(cudaPeekAtLastError());
+	for (len = 1; len <= lenMax && ok != 1; len++) {
+		iterate <<<(unsigned int)pow(LETTERS_LEN, len-1),LETTERS_LEN >>>(len);
+		gpuErrchk( cudaPeekAtLastError() );
+		//gpuErrchk( cudaMemcpy(&ok, &dOk, sizeof(int), cudaMemcpyDeviceToHost) );
 	}
 }
 

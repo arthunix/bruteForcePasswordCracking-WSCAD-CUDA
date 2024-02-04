@@ -1,0 +1,3 @@
+AA:     3b98e2dffc6cb06a89dcb0d5c60a0206
+HELIO:  0aec9f876b8e62cba16c2704d99559d3
+HPCMMP: afa345bc5ced1b9bf90a3ff76d8ac111
