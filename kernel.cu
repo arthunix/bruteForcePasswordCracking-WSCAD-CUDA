@@ -5,7 +5,7 @@
 #include "md5.cuh"
 #include "device_launch_parameters.h"
 
-#define MAX 6
+#define MAX 5
 #define LETTERS_LEN 36
 
 typedef unsigned char byte;
@@ -13,7 +13,6 @@ typedef unsigned char byte;
 char letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
 __device__ __constant__ char dLetters[LETTERS_LEN];
 __device__ __constant__ byte dHash1[MD5_DIGEST_LENGTH];
-__device__ __shared__ int *dOk;
 
 void strHex_to_byte(char*, byte*);
 __device__ int dstrncmp(const char*, const char*, size_t);
@@ -39,19 +38,17 @@ __global__ void iterate(int len) {
 
 	for (int i = 0; i < len; i++) {
 		divisor = (int)pow((double)LETTERS_LEN, (double)(len - i - 1));
-		str[i] = dLetters[ ( index / divisor ) % LETTERS_LEN ];
+		str[i] = dLetters[(index / divisor) % LETTERS_LEN];
 	}
 
-	//printf("idx: %lld.str: %s\n", idx, str);
+	//printf("idx: %lld.str: %s\n", index, str);
 
-	if( dstrlen(str) ) {
+	if (dstrlen(str)) {
 		MD5((byte*)str, dstrlen(str), (unsigned int*)hash2);
-		if ( dstrncmp((char*)dHash1, (char*)hash2, MD5_DIGEST_LENGTH) == 0 ) {
+		if (dstrncmp((char*)dHash1, (char*)hash2, MD5_DIGEST_LENGTH) == 0) {
 			printf("found: %s\n", str);
-			//atomicAdd(&dOk, 1);
 		}
 	}
-
 	delete[] str;
 }
 
@@ -74,19 +71,16 @@ int main(int argc, char** argv) {
 	strHex_to_byte(hash1_str, hash1);
 	print_digest(hash1);
 
-	int ok = 0;
-
 	gpuErrchk( cudaMemcpyToSymbol(dLetters, &letters, LETTERS_LEN, 0, cudaMemcpyHostToDevice) );
 	gpuErrchk( cudaMemcpyToSymbol(dHash1, &hash1, MD5_DIGEST_LENGTH, 0, cudaMemcpyHostToDevice) );
 
-	gpuErrchk( cudaMalloc(&dOk, sizeof(int)) );
-	//gpuErrchk( cudaMemcpy(&dOk, &ok, sizeof(int), cudaMemcpyHostToDevice) );
-
 	// Generate all possible passwords of different sizes.
-	for (len = 1; len <= lenMax && ok != 1; len++) {
-		iterate <<<(unsigned int)pow(LETTERS_LEN, len-1),LETTERS_LEN >>>(len);
-		gpuErrchk( cudaPeekAtLastError() );
-		//gpuErrchk( cudaMemcpy(&ok, &dOk, sizeof(int), cudaMemcpyDeviceToHost) );
+	for (len = 1; len <= lenMax; len++) {
+		dim3 gridArch = { (unsigned int)pow(LETTERS_LEN, len-1), 1, 1 };
+		dim3 blckArch = { LETTERS_LEN, 1, 1 };
+
+		iterate <<< gridArch, blckArch >>> (len);
+		gpuErrchk(cudaPeekAtLastError());
 	}
 }
 
