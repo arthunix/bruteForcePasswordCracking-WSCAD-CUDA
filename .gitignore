@@ -4,6 +4,12 @@
 *.ptx
 *.cubin
 *.fatbin
+*.o
+*.obj
+*.exe
+*.exp
+*.lib
+bfpc
 /.vs/bfpc
 /build
 /vc140.pdb
