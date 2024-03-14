@@ -31,9 +31,12 @@ inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort =
 __global__ void iterate(int len, int* dOk) {
 	char str[MAX];
 	byte hash2[MD5_DIGEST_LENGTH];
-	long long index, divisor;
+	long long indexx, indexy, indexz, index, divisor;
 
-	index = blockIdx.x * blockDim.x + threadIdx.x;
+	indexx = blockIdx.x * blockDim.x + threadIdx.x;
+	indexy = blockIdx.y * blockDim.y + threadIdx.y;
+	indexz = blockIdx.z * blockDim.z + threadIdx.z;
+	index = indexx + indexy + indexz;
 
 	for (int i = 0; i < len; i++) {
 		divisor = (int)pow((double)LETTERS_LEN, (double)(len - i - 1));
@@ -80,8 +83,19 @@ int main(int argc, char** argv) {
 
 	// Generate all possible passwords of different sizes.
 	for (len = 1; len <= lenMax && *dOk != 1; len++) {
-		dim3 gridArch = { (unsigned int)pow(LETTERS_LEN, len-1), 1, 1 };
-		dim3 blckArch = { LETTERS_LEN, 1, 1 };
+		dim3 gridArch = { 
+			( len <  5 ) ? (unsigned int)pow(LETTERS_LEN, len-1) : (unsigned int)pow(LETTERS_LEN, 5) ,
+			( len <= 5 ) ? (unsigned int)pow(LETTERS_LEN, 1) : ( len <= 8  ) ? (unsigned int)pow(LETTERS_LEN, len - 5) : (unsigned int)pow(LETTERS_LEN, 3) , 
+			( len <= 8 ) ? (unsigned int)pow(LETTERS_LEN, 1) : ( len <= 11 ) ? (unsigned int)pow(LETTERS_LEN, len - 8) : (unsigned int)pow(LETTERS_LEN, 3)
+		};
+
+		dim3 blckArch = {
+			LETTERS_LEN, 
+			LETTERS_LEN, 
+			LETTERS_LEN 
+		};
+
+		printf("gridArch - x: %ui, y: %ui, z: %ui; blckArch - x: %ui, y: %ui,z: %ui", gridArch.x, gridArch.y, gridArch.z, blckArch.x, blckArch.y, blckArch.z);
 
 		iterate <<< gridArch, blckArch >>> (len, dOk);
 
